@@ -162,21 +162,8 @@ export async function runEncodePipeline(
     costMap3D[i * 3 + 2] = c;
   }
 
-  // Phase 3: Spatial-strip zones (stable encode↔decode) + capacity check
-  const H = image.height;
-  const W = image.width;
-  const zones3D = new Uint8Array(N * 3);
-  const tA = Math.floor(H * threshA);
-  const tB = Math.floor(H * threshB);
-  for (let y = 0; y < H; y++) {
-    const z = y < tA ? 0 : y < tB ? 1 : 2;
-    for (let x = 0; x < W; x++) {
-      const base = (y * W + x) * 3;
-      zones3D[base] = z;
-      zones3D[base + 1] = z;
-      zones3D[base + 2] = z;
-    }
-  }
+  // Phase 3: Cost-map adaptive zoning & capacity verification
+  const zones3D = classifyZones(costMap3D, config);
   const capInfo = calculateCapacity(image.width, image.height, image.channels, costMap, config);
 
   if (payloadLenBytes > capInfo.max_bytes) {
@@ -333,21 +320,18 @@ export async function runDecodePipeline(
 
   const N = image.width * image.height;
 
-  // Spatial-strip zones (invariant and bit-exact across encode and decode)
-  const H = image.height;
-  const W = image.width;
-  const zones3D = new Uint8Array(N * 3);
-  const tA = Math.floor(H * threshA);
-  const tB = Math.floor(H * threshB);
-  for (let y = 0; y < H; y++) {
-    const z = y < tA ? 0 : y < tB ? 1 : 2;
-    for (let x = 0; x < W; x++) {
-      const base = (y * W + x) * 3;
-      zones3D[base] = z;
-      zones3D[base + 1] = z;
-      zones3D[base + 2] = z;
-    }
+  const resolvedMode = costMapMode === 'heuristic' ? 'heuristic' : 'neural';
+  const costMap = await getCostMap(image, gamma, resolvedMode);
+
+  const costMap3D = new Float32Array(N * 3);
+  for (let i = 0; i < N; i++) {
+    const c = costMap[i];
+    costMap3D[i * 3 + 0] = c;
+    costMap3D[i * 3 + 1] = c;
+    costMap3D[i * 3 + 2] = c;
   }
+
+  const zones3D = classifyZones(costMap3D, config);
 
   const rawZoneA: number[] = [];
   const rawZoneB: number[] = [];

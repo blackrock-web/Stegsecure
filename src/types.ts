@@ -181,6 +181,16 @@ export interface BenchmarkOperationRecord {
   extractionSuccess?: boolean;
   securityScore?: number;
   detectionRate?: number;
+  /**
+   * Which cost-map engine actually produced this result: 'neural' means the
+   * real trained LF-RINN ONNX model (src/backend_ts/costMapNeural.ts) ran on
+   * the backend; 'heuristic-fallback' means the backend was unreachable (or
+   * the ONNX session failed to load) and the browser-side Sobel/Laplacian
+   * heuristic was used instead. Only set for 'Proposed' category models —
+   * baselines/ablations are heuristic by design. Surfacing this prevents a
+   * silent heuristic fallback from being mistaken for a neural-model result.
+   */
+  costMapEngine?: 'neural' | 'heuristic-fallback';
 }
 
 export interface BestResultSummary {
@@ -224,4 +234,3 @@ export interface SystemHealth {
     steganalyzerNet: boolean;
   };
 }
-

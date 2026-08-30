@@ -3,7 +3,8 @@ import path from 'path';
 import multer from 'multer';
 import { createServer as createViteServer } from 'vite';
 import { initOnnxSession, isNeuralModelAvailable } from './src/backend_ts/onnxSession';
-import { runCapacityCheck, runEncodePipeline, runDecodePipeline } from './src/backend_ts/pipeline';
+import { runCapacityCheck, runEncodePipeline, runDecodePipeline, getCostMap } from './src/backend_ts/pipeline';
+import { parsePNG } from './src/backend_ts/imageUtils';
 
 const app = express();
 const PORT = 3000;
@@ -90,6 +91,42 @@ app.post('/api/capacity', upload.single('file') as any, async (req: Request, res
   } catch (err: any) {
     console.error('[API /capacity Error]:', err);
     return res.status(400).json({ error: err.message || 'Capacity calculation failed' });
+  }
+});
+
+// Cost map endpoint — exposes the REAL trained LF-RINN ONNX cost map (or
+// the heuristic, if requested/if the ONNX session is unavailable) to
+// client-side callers. The browser cannot load onnxruntime-node directly,
+// so any browser code (e.g. Benchmark Lab, Comparison Suite) that wants to
+// evaluate the actual neural model — rather than reimplementing an
+// approximation client-side — must go through this endpoint.
+app.post('/api/costmap', upload.single('file') as any, async (req: Request, res: Response) => {
+  try {
+    if (!req.file || !req.file.buffer) {
+      return res.status(400).json({ error: 'No image file provided' });
+    }
+    const gamma = parseFloat((req.body.gamma as string) || '0.7');
+    const requestedMode = (req.body.cost_map_mode as string) || 'neural';
+
+    const image = parsePNG(req.file.buffer);
+    const neuralWasAvailable = isNeuralModelAvailable();
+    const costMap = await getCostMap(image, gamma, requestedMode);
+
+    // getCostMap silently falls back to the heuristic internally if the ONNX
+    // session isn't available; report that honestly instead of always
+    // claiming 'neural' just because 'neural' was requested.
+    const engine: 'neural' | 'heuristic' =
+      requestedMode === 'heuristic' ? 'heuristic' : neuralWasAvailable ? 'neural' : 'heuristic';
+
+    return res.json({
+      width: image.width,
+      height: image.height,
+      engine,
+      cost_map: Array.from(costMap),
+    });
+  } catch (err: any) {
+    console.error('[API /costmap Error]:', err);
+    return res.status(400).json({ error: err.message || 'Cost map computation failed' });
   }
 });
 
@@ -383,9 +420,16 @@ async function startServer() {
   // Initialize LF-RINN ONNX runtime session singleton at startup
   await initOnnxSession();
 
+  const server = app.listen(PORT, '0.0.0.0', () => {
+    console.log(`[SecureStegVault] Server running on http://0.0.0.0:${PORT}`);
+  });
+
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        hmr: process.env.DISABLE_HMR === 'true' ? false : { server },
+      },
       appType: 'spa',
     });
     app.use(vite.middlewares);
@@ -396,10 +440,6 @@ async function startServer() {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
-
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`[SecureStegVault] Server running on http://0.0.0.0:${PORT}`);
-  });
 }
 
 startServer();

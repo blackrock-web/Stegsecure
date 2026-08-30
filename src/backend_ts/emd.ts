@@ -88,12 +88,12 @@ export function embedEMDZoneA(
       const diff = (d - f + 7) % 7;
 
       let ng1 = g1, ng2 = g2, ng3 = g3;
-      if (diff === 1) ng1 = g1 < 255 ? g1 + 1 : g1 - 6;
-      else if (diff === 2) ng2 = g2 < 255 ? g2 + 1 : g2 - 6;
-      else if (diff === 3) ng3 = g3 < 255 ? g3 + 1 : g3 - 6;
-      else if (diff === 4) ng3 = g3 > 0 ? g3 - 1 : g3 + 6;
-      else if (diff === 5) ng2 = g2 > 0 ? g2 - 1 : g2 + 6;
-      else if (diff === 6) ng1 = g1 > 0 ? g1 - 1 : g1 + 6;
+      if (diff === 1) ng1 = (g1 % 8 === 7) ? g1 - 6 : (g1 < 255 ? g1 + 1 : g1 - 6);
+      else if (diff === 2) ng2 = (g2 % 8 === 7) ? g2 - 6 : (g2 < 255 ? g2 + 1 : g2 - 6);
+      else if (diff === 3) ng3 = (g3 % 8 === 7) ? g3 - 6 : (g3 < 255 ? g3 + 1 : g3 - 6);
+      else if (diff === 4) ng3 = (g3 % 8 === 0) ? g3 + 6 : (g3 > 0 ? g3 - 1 : g3 + 6);
+      else if (diff === 5) ng2 = (g2 % 8 === 0) ? g2 + 6 : (g2 > 0 ? g2 - 1 : g2 + 6);
+      else if (diff === 6) ng1 = (g1 % 8 === 0) ? g1 + 6 : (g1 > 0 ? g1 - 1 : g1 + 6);
 
       imageFlat[idx1] = Math.min(255, Math.max(0, ng1));
       imageFlat[idx2] = Math.min(255, Math.max(0, ng2));
@@ -115,10 +115,10 @@ export function embedEMDZoneA(
       const diff = (d - f + 5) % 5;
 
       let ng1 = g1, ng2 = g2;
-      if (diff === 1) ng1 = g1 < 255 ? g1 + 1 : g1 - 4;
-      else if (diff === 2) ng2 = g2 < 255 ? g2 + 1 : g2 - 4;
-      else if (diff === 3) ng2 = g2 > 0 ? g2 - 1 : g2 + 4;
-      else if (diff === 4) ng1 = g1 > 0 ? g1 - 1 : g1 + 4;
+      if (diff === 1) ng1 = (g1 % 8 === 7) ? g1 - 4 : (g1 < 255 ? g1 + 1 : g1 - 4);
+      else if (diff === 2) ng2 = (g2 % 8 === 7) ? g2 - 4 : (g2 < 255 ? g2 + 1 : g2 - 4);
+      else if (diff === 3) ng2 = (g2 % 8 === 0) ? g2 + 4 : (g2 > 0 ? g2 - 1 : g2 + 4);
+      else if (diff === 4) ng1 = (g1 % 8 === 0) ? g1 + 4 : (g1 > 0 ? g1 - 1 : g1 + 4);
 
       imageFlat[idx1] = Math.min(255, Math.max(0, ng1));
       imageFlat[idx2] = Math.min(255, Math.max(0, ng2));

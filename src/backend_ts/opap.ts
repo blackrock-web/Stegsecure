@@ -29,12 +29,15 @@ export function embedOPAPZone(
     const pPrime = (origP & ~mask) | val;
 
     // OPAP candidate search in [pPrime, pPrime + 2^k, pPrime - 2^k]
+    // Bound candidates within the same 8-pixel bucket (origP & ~7) for cost map stability
+    const bucketBase = origP & ~7;
+    const bucketTop = Math.min(255, bucketBase + 7);
     const candidates = [pPrime, pPrime + twoK, pPrime - twoK];
     let bestP = pPrime;
     let minDiff = Math.abs(pPrime - origP);
 
     for (const cand of candidates) {
-      if (cand >= 0 && cand <= 255) {
+      if (cand >= bucketBase && cand <= bucketTop) {
         const diff = Math.abs(cand - origP);
         if (diff < minDiff) {
           minDiff = diff;

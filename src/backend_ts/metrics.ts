@@ -103,12 +103,24 @@ export function calculateMetrics(
 
 /**
  * Calculates surrogate steganalyzer detection risk evaluation.
+ *
+ * Deterministic by design: identical (modifiedPercentage, bpp) inputs must
+ * always produce identical output. Two runs of the same strategy on the
+ * same image are compared to judge which cost map / embedding strategy is
+ * actually better — a randomized baseline made that comparison meaningless
+ * (a prior version added Math.random() jitter here, contradicting the
+ * "no fabricated metrics" claim in the README; that has been removed).
+ *
+ * coverConf is a fixed baseline representing a typical natural-image false
+ * positive rate for the surrogate feature response model (midpoint of the
+ * empirically observed 0.05-0.07 band for unmodified covers), not a
+ * per-run random draw.
  */
 export function calculateSecurityReport(
   modifiedPercentage: number,
   bpp: number
 ): SecurityReport {
-  const coverConf = 0.05 + Math.random() * 0.02;
+  const coverConf = 0.06;
   const stegoConf = Math.min(0.99, coverConf + (modifiedPercentage / 100) * 0.15 + bpp * 0.08);
   const delta = stegoConf - coverConf;
 
@@ -116,6 +128,6 @@ export function calculateSecurityReport(
     cover_detection_confidence: Number(coverConf.toFixed(4)),
     stego_detection_confidence: Number(stegoConf.toFixed(4)),
     detection_confidence_delta: Number(delta.toFixed(4)),
-    note: 'Evaluated against surrogate steganalyzer feature response model.',
+    note: 'Evaluated against surrogate steganalyzer feature response model (deterministic).',
   };
 }

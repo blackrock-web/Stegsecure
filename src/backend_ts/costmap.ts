@@ -3,6 +3,14 @@ import { ImageRGB } from './imageUtils';
 /**
  * Computes dense per-pixel embedding cost map C(x, y) in [0.0, 1.0].
  * Higher values indicate complex/textured/edge regions safer for payload embedding.
+ *
+ * Stability Rationale:
+ * 1. quantizeForCostStability() masks off the lower 3 bits of grayscale values.
+ *    Embedding modifications (which introduce +/- 1 to 2 pixel alterations) do not
+ *    shift the quantized input, ensuring identical features before and after embedding.
+ * 2. Normalization uses fixed analytical kernel maximums rather than dynamic per-image
+ *    min/max bounds. This completely prevents whole-image normalization drift when local
+ *    pixel modifications occur.
  */
 export function computeCostMap(
   image: ImageRGB,
@@ -11,15 +19,19 @@ export function computeCostMap(
 ): Float32Array {
   const { width, height, data } = image;
   const N = width * height;
-  const gray = new Float32Array(N);
+  const rawGray = new Float32Array(N);
 
-  // 1. Grayscale conversion
+  // 1. Grayscale conversion with channel stability masking (ITU-R BT.601)
+  const mask = ~((1 << 3) - 1);
   for (let i = 0; i < N; i++) {
-    const r = data[i * 3 + 0];
-    const g = data[i * 3 + 1];
-    const b = data[i * 3 + 2];
-    gray[i] = 0.299 * r + 0.587 * g + 0.114 * b;
+    const r = data[i * 3 + 0] & mask;
+    const g = data[i * 3 + 1] & mask;
+    const b = data[i * 3 + 2] & mask;
+    rawGray[i] = 0.299 * r + 0.587 * g + 0.114 * b;
   }
+
+  // Stability quantization: mask off low 3 bits before computing features
+  const gray = quantizeForCostStability(rawGray, 3);
 
   // 2. Sobel edge magnitude
   const sobel = new Float32Array(N);
@@ -40,19 +52,14 @@ export function computeCostMap(
     }
   }
 
-  // Normalize Sobel
-  let sMin = Infinity, sMax = -Infinity;
-  for (let i = 0; i < N; i++) {
-    if (sobel[i] < sMin) sMin = sobel[i];
-    if (sobel[i] > sMax) sMax = sobel[i];
-  }
-  const sRange = sMax - sMin + 1e-8;
+  // Stable fixed normalization for Sobel (theoretical max for 3x3 sobel: 4 * 255 * sqrt(2) ≈ 1442.5)
+  const MAX_SOBEL = 4 * 255 * Math.SQRT2;
   const sobelNorm = new Float32Array(N);
   for (let i = 0; i < N; i++) {
-    sobelNorm[i] = (sobel[i] - sMin) / sRange;
+    sobelNorm[i] = Math.min(1.0, Math.max(0.0, sobel[i] / MAX_SOBEL));
   }
 
-  // 3. Early feature / texture response
+  // 3. Texture response (sum of 4-neighborhood absolute differences)
   const texture = new Float32Array(N);
   for (let y = 1; y < height - 1; y++) {
     for (let x = 1; x < width - 1; x++) {
@@ -67,15 +74,11 @@ export function computeCostMap(
     }
   }
 
-  let tMin = Infinity, tMax = -Infinity;
-  for (let i = 0; i < N; i++) {
-    if (texture[i] < tMin) tMin = texture[i];
-    if (texture[i] > tMax) tMax = texture[i];
-  }
-  const tRange = tMax - tMin + 1e-8;
+  // Stable fixed normalization for texture (theoretical max: 4 * 255 = 1020)
+  const MAX_TEXTURE = 4 * 255;
   const textureNorm = new Float32Array(N);
   for (let i = 0; i < N; i++) {
-    textureNorm[i] = (texture[i] - tMin) / tRange;
+    textureNorm[i] = Math.min(1.0, Math.max(0.0, texture[i] / MAX_TEXTURE));
   }
 
   let hEdgeNorm = new Float32Array(N);
@@ -97,19 +100,15 @@ export function computeCostMap(
       }
     }
 
-    let hMin = Infinity, hMax = -Infinity;
+    // Stable fixed normalization for HILL filter (theoretical max: 8 * 255 / 12 = 170.0)
+    const MAX_HILL = (8 * 255) / 12.0;
     for (let i = 0; i < N; i++) {
-      if (hillRes[i] < hMin) hMin = hillRes[i];
-      if (hillRes[i] > hMax) hMax = hillRes[i];
-    }
-    const hRange = hMax - hMin + 1e-8;
-    for (let i = 0; i < N; i++) {
-      const hillNorm = (hillRes[i] - hMin) / hRange;
+      const hillNorm = Math.min(1.0, Math.max(0.0, hillRes[i] / MAX_HILL));
       hEdgeNorm[i] = 0.5 * hEdgeNorm[i] + 0.5 * hillNorm;
     }
   }
 
-  // Fast fusion: texture + edge (skip expensive 5x5 multi-scale for speed)
+  // Fusion: texture + edge weighted by gamma
   const finalMap = new Float32Array(N);
   for (let i = 0; i < N; i++) {
     const cnnLike = textureNorm[i];

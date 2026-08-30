@@ -8,6 +8,7 @@ export default defineConfig({
     // used when Vite runs standalone; in middleware mode server.ts owns the port
     port: 3000,
     strictPort: false,
+    hmr: process.env.DISABLE_HMR === 'true' ? false : { port: 24678 },
   },
   build: {
     outDir: 'dist',

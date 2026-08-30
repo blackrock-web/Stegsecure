@@ -68,12 +68,13 @@ export async function computeCostMapNeural(
   }
 
   try {
-    // 1. Grayscale conversion (ITU-R BT.601)
+    // 1. Grayscale conversion with channel stability masking (ITU-R BT.601)
+    const mask = ~((1 << stabilizeBits) - 1);
     const gray = new Float32Array(N);
     for (let i = 0; i < N; i++) {
-      const r = data[i * 3 + 0];
-      const g = data[i * 3 + 1];
-      const b = data[i * 3 + 2];
+      const r = data[i * 3 + 0] & mask;
+      const g = data[i * 3 + 1] & mask;
+      const b = data[i * 3 + 2] & mask;
       gray[i] = 0.299 * r + 0.587 * g + 0.114 * b;
     }
 

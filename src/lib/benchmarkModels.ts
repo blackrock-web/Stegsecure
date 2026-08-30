@@ -56,7 +56,78 @@ export interface BenchmarkModelDefinition {
     extractionSuccess: boolean;
     securityScore: number;
     detectionRate: number;
+    costMapEngine?: 'neural' | 'heuristic-fallback';
   }>;
+}
+
+/**
+ * Renders an ImageData to an in-memory PNG Blob so it can be uploaded to the
+ * backend. Needed because /api/costmap (like /api/encode) takes multipart
+ * file uploads, not raw pixel arrays.
+ */
+async function imageDataToPngBlob(imageData: ImageData): Promise<Blob> {
+  const canvas = document.createElement('canvas');
+  canvas.width = imageData.width;
+  canvas.height = imageData.height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Canvas 2D context unavailable for PNG encoding.');
+  ctx.putImageData(imageData, 0, 0);
+  return await new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) resolve(blob);
+      else reject(new Error('Canvas PNG encoding failed.'));
+    }, 'image/png');
+  });
+}
+
+interface NeuralCostMapResult {
+  costMap: Float32Array;
+  engine: 'neural' | 'heuristic-fallback';
+}
+
+/**
+ * Fetches the cost map from the trained LF-RINN ONNX model running on the
+ * backend (src/backend_ts/costMapNeural.ts, via onnxruntime-node).
+ *
+ * IMPORTANT: this used to be `computeCostMap(imageData, gamma, 'cnn')` from
+ * stegEngine.ts, which despite the 'cnn' mode name is a hand-written
+ * Sobel/Laplacian/variance heuristic — it never touched the trained model.
+ * onnxruntime-node only runs in Node, so the browser cannot execute the
+ * ONNX graph directly; this function is the only way client-side code
+ * (Benchmark Lab, Comparison Suite) can evaluate the real network instead
+ * of silently substituting an approximation for it.
+ *
+ * If the backend is unreachable, or the ONNX session failed to load there,
+ * this falls back to the same local heuristic as before — but it reports
+ * `engine: 'heuristic-fallback'` so callers (and the UI) can tell the
+ * difference instead of a heuristic result being mislabeled as neural.
+ */
+async function fetchNeuralCostMap(
+  imageData: ImageData,
+  gamma: number = 0.7
+): Promise<NeuralCostMapResult> {
+  try {
+    const blob = await imageDataToPngBlob(imageData);
+    const formData = new FormData();
+    formData.append('file', blob, 'cover.png');
+    formData.append('gamma', gamma.toString());
+    formData.append('cost_map_mode', 'neural');
+
+    const res = await fetch('/api/costmap', { method: 'POST', body: formData });
+    if (!res.ok) throw new Error(`/api/costmap responded ${res.status}`);
+    const data = await res.json();
+    if (!Array.isArray(data.cost_map)) throw new Error('/api/costmap returned no cost_map array');
+
+    return {
+      costMap: Float32Array.from(data.cost_map as number[]),
+      engine: data.engine === 'neural' ? 'neural' : 'heuristic-fallback',
+    };
+  } catch {
+    return {
+      costMap: computeCostMap(imageData, gamma, 'advanced'),
+      engine: 'heuristic-fallback',
+    };
+  }
 }
 
 // 8x8 Magic Matrix (Constant Sum 260) for Rahman et al. 2025 Paper 4
@@ -203,7 +274,7 @@ export const BENCHMARK_MODELS: BenchmarkModelDefinition[] = [
     run: async (coverImageData, payloadText, passphrase) => {
       const { width, height } = coverImageData;
       const totalPixels = width * height;
-      const costMap = computeCostMap(coverImageData, 0.7, 'cnn');
+      const { costMap, engine: costMapEngine } = await fetchNeuralCostMap(coverImageData, 0.7);
       const zones = classifyZones(costMap, 0.35, 0.65);
       const encryptedBytes = await encryptPayload(payloadText, passphrase);
 
@@ -268,11 +339,17 @@ export const BENCHMARK_MODELS: BenchmarkModelDefinition[] = [
         bitsRemaining = Math.max(0, totalBitsToEmbed - currentBitIdx);
       }
 
-      // Extraction and verification
+      // Extraction and verification. Re-derive the cost map from the SAME
+      // engine used at embed time (neural vs. fallback) so encode/decode
+      // zoning stays consistent even if the backend engine's availability
+      // changed mid-benchmark (e.g. ONNX session dropped between calls).
       let extractionSuccess = false;
       try {
-        const costMapDec = computeCostMap(stegoImageData, 0.7, 'cnn');
-        const zonesDec = classifyZones(costMapDec, 0.35, 0.65);
+        const decCostMap =
+          costMapEngine === 'neural'
+            ? (await fetchNeuralCostMap(stegoImageData, 0.7)).costMap
+            : computeCostMap(stegoImageData, 0.7, 'advanced');
+        const zonesDec = classifyZones(decCostMap, 0.35, 0.65);
         const zA: number[] = [];
         const zB: number[] = [];
         const zC: number[] = [];
@@ -331,6 +408,7 @@ export const BENCHMARK_MODELS: BenchmarkModelDefinition[] = [
         extractionSuccess,
         securityScore: 100 - security.compositeRiskScore,
         detectionRate: security.rsAnalysis.estimatedEmbeddingRate,
+        costMapEngine,
       };
     },
   },
@@ -347,7 +425,7 @@ export const BENCHMARK_MODELS: BenchmarkModelDefinition[] = [
     run: async (coverImageData, payloadText, passphrase) => {
       const { width, height } = coverImageData;
       const totalPixels = width * height;
-      const costMap = computeCostMap(coverImageData, 0.7, 'cnn');
+      const { costMap, engine: costMapEngine } = await fetchNeuralCostMap(coverImageData, 0.7);
       const zones = classifyZones(costMap, 0.35, 0.65);
       const encryptedBytes = await encryptPayload(payloadText, passphrase);
 
@@ -412,11 +490,15 @@ export const BENCHMARK_MODELS: BenchmarkModelDefinition[] = [
         bitsRemaining = Math.max(0, totalBitsToEmbed - currentBitIdx);
       }
 
-      // Extraction and verification
+      // Extraction and verification. Re-derive with the SAME engine used at
+      // embed time so encode/decode zoning stays consistent.
       let extractionSuccess = false;
       try {
-        const costMapDec = computeCostMap(stegoImageData, 0.7, 'cnn');
-        const zonesDec = classifyZones(costMapDec, 0.35, 0.65);
+        const decCostMap =
+          costMapEngine === 'neural'
+            ? (await fetchNeuralCostMap(stegoImageData, 0.7)).costMap
+            : computeCostMap(stegoImageData, 0.7, 'advanced');
+        const zonesDec = classifyZones(decCostMap, 0.35, 0.65);
         const zA: number[] = [];
         const zB: number[] = [];
         const zC: number[] = [];
@@ -475,6 +557,7 @@ export const BENCHMARK_MODELS: BenchmarkModelDefinition[] = [
         extractionSuccess,
         securityScore: 100 - security.compositeRiskScore,
         detectionRate: security.rsAnalysis.estimatedEmbeddingRate,
+        costMapEngine,
       };
     },
   },
@@ -829,7 +912,12 @@ export const BENCHMARK_MODELS: BenchmarkModelDefinition[] = [
     run: async (coverImageData, payloadText, passphrase) => {
       const { width, height } = coverImageData;
       const totalPixels = width * height;
-      const costMap = computeCostMap(coverImageData, 0.7, 'cnn');
+      // Ablation baselines intentionally use the heuristic edge map, never
+      // the trained neural model — that's what makes them a baseline. This
+      // was called with mode 'cnn' before, which is misleading: 'cnn' and
+      // 'advanced' hit the identical heuristic branch in computeCostMap();
+      // 'advanced' is the honest name for what actually runs here.
+      const costMap = computeCostMap(coverImageData, 0.7, 'advanced');
       const zones = classifyZones(costMap, 0.35, 0.65);
       const encryptedBytes = await encryptPayload(payloadText, passphrase);
 
@@ -1062,6 +1150,7 @@ export async function executeBenchmarkOperation(
       extractionSuccess: res.extractionSuccess,
       securityScore: res.securityScore,
       detectionRate: res.detectionRate,
+      costMapEngine: res.costMapEngine,
     };
   } catch (err: any) {
     const endTime = performance.now();

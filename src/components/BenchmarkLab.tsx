@@ -443,6 +443,7 @@ export const BenchmarkLab: React.FC = () => {
       'Extraction Status',
       'Security Score',
       'Detection Rate',
+      'Cost Map Engine',
       'Error Information',
     ];
 
@@ -471,6 +472,7 @@ export const BenchmarkLab: React.FC = () => {
       r.extractionSuccess !== undefined ? (r.extractionSuccess ? 'Success' : 'Failed') : '',
       r.securityScore !== undefined ? r.securityScore : '',
       r.detectionRate !== undefined ? r.detectionRate : '',
+      escapeCsv(r.costMapEngine || ''),
       escapeCsv(r.error || ''),
     ]);
 
@@ -1132,8 +1134,24 @@ export const BenchmarkLab: React.FC = () => {
                     <td className="p-3 text-slate-500">{rec.dataset}</td>
                     <td className="p-3">
                       <div className="font-semibold text-slate-900">{rec.modelName}</div>
-                      <div className="text-[10px] text-slate-400 font-mono">
+                      <div className="text-[10px] text-slate-400 font-mono flex items-center gap-1.5">
                         {rec.modelCategory}
+                        {rec.costMapEngine === 'neural' && (
+                          <span
+                            className="px-1.5 py-0 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-full font-medium"
+                            title="Cost map came from the trained LF-RINN ONNX model running on the backend."
+                          >
+                            neural
+                          </span>
+                        )}
+                        {rec.costMapEngine === 'heuristic-fallback' && (
+                          <span
+                            className="px-1.5 py-0 bg-amber-50 text-amber-700 border border-amber-200 rounded-full font-medium cursor-help"
+                            title="Backend/ONNX model was unreachable for this run — fell back to the local heuristic cost map instead of the trained network. Start the dev server (npm run dev) so Benchmark Lab can reach /api/costmap."
+                          >
+                            heuristic fallback
+                          </span>
+                        )}
                       </div>
                     </td>
                     <td className="p-3 text-right font-mono font-semibold text-slate-800">
