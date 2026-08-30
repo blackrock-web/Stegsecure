@@ -9,12 +9,29 @@ import {
   FileArchive,
   RefreshCw,
   Trash2,
+  AlertCircle,
 } from 'lucide-react';
-import { BatchItem, ZoningConfig } from '../types';
+import { ZoningConfig } from '../types';
 import { encodeStego } from '../lib/api';
 
+interface RealBatchItem {
+  id: string;
+  file: File;
+  filename: string;
+  filesize: number;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  progress: number;
+  result?: {
+    psnr: number;
+    ssim: number;
+    payloadBytes: number;
+    stegoUrl: string;
+  };
+  error?: string;
+}
+
 export const BatchLab: React.FC = () => {
-  const [items, setItems] = useState<BatchItem[]>([]);
+  const [items, setItems] = useState<RealBatchItem[]>([]);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [secretText, setSecretText] = useState<string>('CONFIDENTIAL BATCH RUN: Adaptive EMD OPAP encoding verification.');
   const [passphrase, setPassphrase] = useState<string>('BatchSecure2026!');
@@ -32,8 +49,9 @@ export const BatchLab: React.FC = () => {
 
   const handleFiles = (files: FileList | null) => {
     if (!files) return;
-    const newItems: BatchItem[] = Array.from(files).map((f, i) => ({
-      id: `batch-${Date.now()}-${i}`,
+    const newItems: RealBatchItem[] = Array.from(files).map((f, i) => ({
+      id: `batch-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 6)}`,
+      file: f,
       filename: f.name,
       filesize: f.size,
       status: 'pending',
@@ -47,32 +65,54 @@ export const BatchLab: React.FC = () => {
     setIsProcessing(true);
 
     for (let i = 0; i < items.length; i++) {
-      setItems((prev) =>
-        prev.map((item, idx) =>
-          idx === i ? { ...item, status: 'processing', progress: 40 } : item
-        )
-      );
-
-      // Simulate step processing
-      await new Promise((r) => setTimeout(r, 450));
+      const currentItem = items[i];
+      if (currentItem.status === 'completed') continue;
 
       setItems((prev) =>
         prev.map((item, idx) =>
-          idx === i
-            ? {
-                ...item,
-                status: 'completed',
-                progress: 100,
-                result: {
-                  psnr: Number((65 + Math.random() * 5).toFixed(2)),
-                  ssim: Number((0.9995 + Math.random() * 0.0004).toFixed(4)),
-                  payloadBytes: secretText.length + 38,
-                  stegoUrl: '',
-                },
-              }
-            : item
+          idx === i ? { ...item, status: 'processing', progress: 30 } : item
         )
       );
+
+      try {
+        const response = await encodeStego(
+          currentItem.file,
+          secretText,
+          passphrase,
+          config
+        );
+
+        setItems((prev) =>
+          prev.map((item, idx) =>
+            idx === i
+              ? {
+                  ...item,
+                  status: 'completed',
+                  progress: 100,
+                  result: {
+                    psnr: response.metrics.psnrDb,
+                    ssim: response.metrics.ssim,
+                    payloadBytes: secretText.length + 38,
+                    stegoUrl: response.visuals.stegoDataUrl,
+                  },
+                }
+              : item
+          )
+        );
+      } catch (err: any) {
+        setItems((prev) =>
+          prev.map((item, idx) =>
+            idx === i
+              ? {
+                  ...item,
+                  status: 'failed',
+                  progress: 100,
+                  error: err.message || 'Processing failed',
+                }
+              : item
+          )
+        );
+      }
     }
 
     setIsProcessing(false);
@@ -85,14 +125,14 @@ export const BatchLab: React.FC = () => {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
       {/* Top Header */}
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold text-white flex items-center space-x-2">
-            <FolderArchive className="w-5 h-5 text-indigo-400" />
+          <h1 className="text-xl font-bold text-slate-900 flex items-center space-x-2">
+            <FolderArchive className="w-5 h-5 text-indigo-600" />
             <span>Batch Processing Lab</span>
           </h1>
-          <p className="text-xs text-slate-400 mt-1">
-            Queue and process large corpora of cover images (e.g. BOSSBase, BOWS-2) with concurrent multi-strategy pipelines.
+          <p className="text-xs text-slate-500 mt-1">
+            Queue and process image batches with actual execution of the SecureStegVault adaptive zoning and EMD/OPAP encoding engine.
           </p>
         </div>
 
@@ -100,16 +140,18 @@ export const BatchLab: React.FC = () => {
           {items.length > 0 && (
             <button
               onClick={clearItems}
-              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium border border-slate-700 transition-colors flex items-center space-x-1"
+              disabled={isProcessing}
+              className="px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-lg text-xs font-medium border border-slate-200 transition-colors flex items-center space-x-1 disabled:opacity-50"
             >
-              <Trash2 className="w-3.5 h-3.5 text-red-400" />
+              <Trash2 className="w-3.5 h-3.5 text-rose-500" />
               <span>Clear Queue</span>
             </button>
           )}
 
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold shadow transition-colors flex items-center space-x-1.5"
+            disabled={isProcessing}
+            className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors flex items-center space-x-1.5 cursor-pointer"
           >
             <Upload className="w-3.5 h-3.5" />
             <span>Add Batch Images</span>
@@ -119,7 +161,7 @@ export const BatchLab: React.FC = () => {
             multiple
             ref={fileInputRef}
             onChange={(e) => handleFiles(e.target.files)}
-            accept="image/png,image/bmp"
+            accept="image/png,image/bmp,image/jpeg"
             className="hidden"
           />
         </div>
@@ -127,40 +169,42 @@ export const BatchLab: React.FC = () => {
 
       {/* Batch Form & Control */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-2">
-          <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
+        <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-2 shadow-xs">
+          <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block">
             Batch Secret Message
           </label>
           <input
             type="text"
             value={secretText}
             onChange={(e) => setSecretText(e.target.value)}
-            className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-xs text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
+            disabled={isProcessing}
+            className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs text-slate-800 font-mono focus:outline-hidden focus:bg-white focus:border-indigo-500"
           />
         </div>
 
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-2">
-          <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
+        <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-2 shadow-xs">
+          <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block">
             Passphrase
           </label>
           <input
             type="text"
             value={passphrase}
             onChange={(e) => setPassphrase(e.target.value)}
-            className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-xs text-slate-200 font-mono focus:outline-none focus:border-emerald-500"
+            disabled={isProcessing}
+            className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs text-slate-800 font-mono focus:outline-hidden focus:bg-white focus:border-emerald-500"
           />
         </div>
 
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex items-end">
+        <div className="bg-white border border-slate-200 rounded-xl p-4 flex items-end shadow-xs">
           <button
             onClick={handleRunBatch}
             disabled={items.length === 0 || isProcessing}
-            className="w-full py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 disabled:opacity-50 text-white font-bold text-xs rounded-lg shadow transition-all flex items-center justify-center space-x-2"
+            className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-semibold text-xs rounded-lg shadow-xs transition-all flex items-center justify-center space-x-2 cursor-pointer disabled:cursor-not-allowed"
           >
             {isProcessing ? (
               <>
                 <RefreshCw className="w-4 h-4 animate-spin" />
-                <span>Processing Queue...</span>
+                <span>Processing Queue Real-time...</span>
               </>
             ) : (
               <>
@@ -173,55 +217,76 @@ export const BatchLab: React.FC = () => {
       </div>
 
       {/* Queue List */}
-      <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-sm">
-        <div className="p-4 border-b border-slate-800 flex items-center justify-between">
-          <span className="text-xs font-bold text-slate-200 uppercase tracking-wider">
+      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs">
+        <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+          <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
             Job Queue ({items.length} items)
           </span>
-          <span className="text-xs font-mono text-slate-400">
+          <span className="text-xs font-mono text-slate-500">
             {items.filter((i) => i.status === 'completed').length} completed
           </span>
         </div>
 
         {items.length === 0 ? (
-          <div className="p-12 text-center text-slate-500 text-xs">
+          <div className="p-12 text-center text-slate-400 text-xs">
             <FileArchive className="w-10 h-10 mx-auto mb-2 opacity-30 text-indigo-400" />
-            <p className="text-slate-300 text-sm font-medium">Batch queue is empty.</p>
-            <p className="text-slate-500 mt-1">Upload multiple PNG/BMP covers to perform high-throughput embedding.</p>
+            <p className="text-slate-700 text-sm font-medium">Batch queue is empty.</p>
+            <p className="text-slate-500 mt-1">Upload multiple PNG/BMP/JPEG covers to execute real steganographic embedding.</p>
           </div>
         ) : (
-          <div className="divide-y divide-slate-800 text-xs font-mono">
+          <div className="divide-y divide-slate-100 text-xs font-mono">
             {items.map((item) => (
-              <div key={item.id} className="p-3.5 flex items-center justify-between hover:bg-slate-800/40 transition-colors">
+              <div key={item.id} className="p-3.5 flex items-center justify-between hover:bg-slate-50 transition-colors">
                 <div className="flex items-center space-x-3">
                   {item.status === 'completed' ? (
-                    <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
                   ) : item.status === 'processing' ? (
-                    <RefreshCw className="w-4 h-4 text-indigo-400 animate-spin shrink-0" />
+                    <RefreshCw className="w-4 h-4 text-indigo-600 animate-spin shrink-0" />
+                  ) : item.status === 'failed' ? (
+                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
                   ) : (
-                    <Clock className="w-4 h-4 text-slate-500 shrink-0" />
+                    <Clock className="w-4 h-4 text-slate-400 shrink-0" />
                   )}
                   <div>
-                    <span className="font-semibold text-slate-200 block">{item.filename}</span>
-                    <span className="text-[10px] text-slate-400">{(item.filesize / 1024).toFixed(1)} KB</span>
+                    <span className="font-semibold text-slate-800 block">{item.filename}</span>
+                    <span className="text-[10px] text-slate-500">{(item.filesize / 1024).toFixed(1)} KB</span>
+                    {item.error && (
+                      <span className="text-[10px] text-rose-600 block mt-0.5">{item.error}</span>
+                    )}
                   </div>
                 </div>
 
-                <div className="flex items-center space-x-6">
+                <div className="flex items-center space-x-4">
                   {item.result && (
-                    <div className="flex items-center space-x-3 text-slate-300">
-                      <span className="text-emerald-400 font-bold">PSNR: {item.result.psnr} dB</span>
-                      <span className="text-indigo-300">SSIM: {item.result.ssim}</span>
+                    <div className="flex items-center space-x-3">
+                      <span className="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                        PSNR: {item.result.psnr.toFixed(2)} dB
+                      </span>
+                      <span className="text-indigo-700 font-bold bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
+                        SSIM: {item.result.ssim.toFixed(4)}
+                      </span>
+                      {item.result.stegoUrl && (
+                        <a
+                          href={item.result.stegoUrl}
+                          download={`stego-${item.filename}`}
+                          className="p-1 text-slate-600 hover:text-indigo-600 hover:bg-slate-100 rounded transition-colors"
+                          title="Download Stego Image"
+                        >
+                          <Download className="w-4 h-4" />
+                        </a>
+                      )}
                     </div>
                   )}
 
                   <span
                     className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold ${
                       item.status === 'completed'
-                        ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                         : item.status === 'processing'
-                        ? 'bg-indigo-950 text-indigo-300 border border-indigo-800'
-                        : 'bg-slate-800 text-slate-400'
+                        ? 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                        : item.status === 'failed'
+                        ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                        : 'bg-slate-100 text-slate-600 border border-slate-200'
                     }`}
                   >
                     {item.status}
@@ -235,3 +300,4 @@ export const BatchLab: React.FC = () => {
     </div>
   );
 };
+

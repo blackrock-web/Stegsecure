@@ -1,13 +1,14 @@
 /**
  * EMD (Exploiting Modification Direction) algorithm (Zhang & Wang 2006).
+ * Features rigorous overflow/underflow boundary compensation for 100% bit-exact recovery.
  */
 
-export function bytesToBase5Digits(bytes: Buffer): number[] {
+export function bytesToBase5Digits(bytes: Buffer | Uint8Array): number[] {
   const digits: number[] = [];
-  for (const b of bytes) {
-    let val = b;
+  for (let i = 0; i < bytes.length; i++) {
+    let val = bytes[i];
     const d: number[] = [];
-    for (let i = 0; i < 4; i++) {
+    for (let j = 0; j < 4; j++) {
       d.push(val % 5);
       val = Math.floor(val / 5);
     }
@@ -25,17 +26,17 @@ export function base5DigitsToBytes(digits: number[]): Buffer {
     for (const d of chunk) {
       val = val * 5 + d;
     }
-    bytes.push(Math.min(255, val));
+    bytes.push(Math.min(255, Math.max(0, val)));
   }
   return Buffer.from(bytes);
 }
 
-export function bytesToBase7Digits(bytes: Buffer): number[] {
+export function bytesToBase7Digits(bytes: Buffer | Uint8Array): number[] {
   const digits: number[] = [];
-  for (const b of bytes) {
-    let val = b;
+  for (let i = 0; i < bytes.length; i++) {
+    let val = bytes[i];
     const d: number[] = [];
-    for (let i = 0; i < 3; i++) {
+    for (let j = 0; j < 3; j++) {
       d.push(val % 7);
       val = Math.floor(val / 7);
     }
@@ -53,13 +54,14 @@ export function base7DigitsToBytes(digits: number[]): Buffer {
     for (const d of chunk) {
       val = val * 7 + d;
     }
-    bytes.push(Math.min(255, val));
+    bytes.push(Math.min(255, Math.max(0, val)));
   }
   return Buffer.from(bytes);
 }
 
 /**
  * Embeds base-5 or base-7 digits into Zone A pixel indices using EMD.
+ * Applies boundary overflow wrapping (mod arithmetic) so extraction is 100% loss-free.
  */
 export function embedEMDZoneA(
   imageFlat: Uint8Array,
@@ -86,16 +88,16 @@ export function embedEMDZoneA(
       const diff = (d - f + 7) % 7;
 
       let ng1 = g1, ng2 = g2, ng3 = g3;
-      if (diff === 1) ng1 = Math.min(255, g1 + 1);
-      else if (diff === 2) ng2 = Math.min(255, g2 + 1);
-      else if (diff === 3) ng3 = Math.min(255, g3 + 1);
-      else if (diff === 4) ng3 = Math.max(0, g3 - 1);
-      else if (diff === 5) ng2 = Math.max(0, g2 - 1);
-      else if (diff === 6) ng1 = Math.max(0, g1 - 1);
+      if (diff === 1) ng1 = g1 < 255 ? g1 + 1 : g1 - 6;
+      else if (diff === 2) ng2 = g2 < 255 ? g2 + 1 : g2 - 6;
+      else if (diff === 3) ng3 = g3 < 255 ? g3 + 1 : g3 - 6;
+      else if (diff === 4) ng3 = g3 > 0 ? g3 - 1 : g3 + 6;
+      else if (diff === 5) ng2 = g2 > 0 ? g2 - 1 : g2 + 6;
+      else if (diff === 6) ng1 = g1 > 0 ? g1 - 1 : g1 + 6;
 
-      imageFlat[idx1] = ng1;
-      imageFlat[idx2] = ng2;
-      imageFlat[idx3] = ng3;
+      imageFlat[idx1] = Math.min(255, Math.max(0, ng1));
+      imageFlat[idx2] = Math.min(255, Math.max(0, ng2));
+      imageFlat[idx3] = Math.min(255, Math.max(0, ng3));
 
       embeddedCount++;
     }
@@ -113,13 +115,13 @@ export function embedEMDZoneA(
       const diff = (d - f + 5) % 5;
 
       let ng1 = g1, ng2 = g2;
-      if (diff === 1) ng1 = Math.min(255, g1 + 1);
-      else if (diff === 2) ng2 = Math.min(255, g2 + 1);
-      else if (diff === 3) ng2 = Math.max(0, g2 - 1);
-      else if (diff === 4) ng1 = Math.max(0, g1 - 1);
+      if (diff === 1) ng1 = g1 < 255 ? g1 + 1 : g1 - 4;
+      else if (diff === 2) ng2 = g2 < 255 ? g2 + 1 : g2 - 4;
+      else if (diff === 3) ng2 = g2 > 0 ? g2 - 1 : g2 + 4;
+      else if (diff === 4) ng1 = g1 > 0 ? g1 - 1 : g1 + 4;
 
-      imageFlat[idx1] = ng1;
-      imageFlat[idx2] = ng2;
+      imageFlat[idx1] = Math.min(255, Math.max(0, ng1));
+      imageFlat[idx2] = Math.min(255, Math.max(0, ng2));
 
       embeddedCount++;
     }

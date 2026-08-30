@@ -1,11 +1,18 @@
 import { parsePNG } from './imageUtils';
-
-import { encryptPayload, decryptPayload } from './crypto';
-import { computeCostMap } from './costmap';
+import { encryptPayload, decryptPayload, inspectPayloadMetadata } from './crypto';
+import { computeCostMap as computeHeuristicCostMap } from './costmap';
+import { computeCostMapNeural } from './costMapNeural';
+import { isNeuralModelAvailable } from './onnxSession';
 import { ZoningConfig, classifyZones, calculateCapacity, CapacityInfo } from './zoning';
-import { embedEMDZoneA, extractEMDZoneA, bytesToBase5Digits, base5DigitsToBytes, bytesToBase7Digits, base7DigitsToBytes } from './emd';
+import {
+  embedEMDZoneA,
+  extractEMDZoneA,
+  bytesToBase5Digits,
+  base5DigitsToBytes,
+  bytesToBase7Digits,
+  base7DigitsToBytes,
+} from './emd';
 import { embedOPAPZone, extractOPAPZone } from './opap';
-import { rankZoneIndices } from './costOptimizer';
 import { calculateMetrics, calculateSecurityReport, MetricsResult, SecurityReport } from './metrics';
 import { generateVisualizations } from './visualize';
 
@@ -31,18 +38,34 @@ export interface EncodeResult {
 export interface DecodeResult {
   success: boolean;
   decrypted_text: string;
+  cost_map_mode?: string;
 }
 
-export function runCapacityCheck(
+/**
+ * Helper to dispatch to neural or heuristic cost map based on requested mode.
+ */
+export async function getCostMap(
+  image: { width: number; height: number; channels: number; data: Uint8Array },
+  gamma: number = 0.7,
+  costMapMode: string = 'neural'
+): Promise<Float32Array> {
+  const isNeural = costMapMode === 'neural' || (costMapMode === 'auto' && isNeuralModelAvailable());
+  if (isNeural) {
+    return await computeCostMapNeural(image, gamma, 'neural');
+  }
+  return computeHeuristicCostMap(image, gamma, costMapMode);
+}
+
+export async function runCapacityCheck(
   imageBuffer: Buffer,
   threshA: number = 0.35,
   threshB: number = 0.65,
   gamma: number = 0.7,
-  costMapMode: string = 'fast',
+  costMapMode: string = 'neural',
   emdN: number = 2
 ) {
   const image = parsePNG(imageBuffer);
-  const costMap = computeCostMap(image, gamma, costMapMode);
+  const costMap = await getCostMap(image, gamma, costMapMode);
   const config: ZoningConfig = {
     threshA,
     threshB,
@@ -56,6 +79,8 @@ export function runCapacityCheck(
   const totalImagePixels = image.width * image.height;
   const overallBpp = cap.total_capacity_bits / (totalImagePixels || 1);
   const maxPlaintext = Math.max(0, cap.max_bytes - 48);
+
+  const activeMode = costMapMode === 'neural' ? 'neural' : 'heuristic';
 
   return {
     width: image.width,
@@ -75,12 +100,16 @@ export function runCapacityCheck(
       zone_c_bpp: cap.zone_breakdown.zone_c_bpp,
       zone_breakdown: cap.zone_breakdown,
     },
-    cost_map_mode: `CNN-style multi-scale residual + Edge Fusion (${costMapMode} mode)`,
+    cost_map_mode: activeMode,
+    model_description:
+      activeMode === 'neural'
+        ? 'LF-RINN Invertible Transform + CNN Edge/Texture Cost Map'
+        : `Heuristic Multi-Scale Edge Fusion (${costMapMode} mode)`,
     emd_n: emdN,
   };
 }
 
-export function runEncodePipeline(
+export async function runEncodePipeline(
   imageBuffer: Buffer,
   secretText: string,
   passphrase: string,
@@ -89,10 +118,10 @@ export function runEncodePipeline(
   gamma: number = 0.7,
   kbBits: number = 2,
   kcBits: number = 3,
-  costMapMode: string = 'fast',
+  costMapMode: string = 'neural',
   adversarialStrength: number = 0.0,
   emdN: number = 2
-): EncodeResult {
+): Promise<EncodeResult> {
   if (!secretText || !secretText.trim()) {
     throw new Error('Secret message cannot be empty.');
   }
@@ -109,12 +138,19 @@ export function runEncodePipeline(
     kcBits,
   };
 
-  // Phase 1: Cryptographic pre-processing
-  const encryptedPayload = encryptPayload(secretText, passphrase);
+  const resolvedMode = costMapMode === 'heuristic' ? 'heuristic' : 'neural';
+
+  // Phase 1: Cryptographic pre-processing with header metadata
+  const encryptedPayload = encryptPayload(secretText, passphrase, {
+    costMapMode: resolvedMode,
+    emdN,
+    threshA,
+    threshB,
+  });
   const payloadLenBytes = encryptedPayload.length;
 
-  // Phase 2: Cost map generation
-  const costMap = computeCostMap(image, gamma, costMapMode);
+  // Phase 2: Cost map generation (Neural LF-RINN or Heuristic fallback)
+  const costMap = await getCostMap(image, gamma, resolvedMode);
 
   // Repeat cost map 3 times for RGB channels
   const N = image.width * image.height;
@@ -265,13 +301,13 @@ export function runEncodePipeline(
     metrics,
     security_report: securityReport,
     visuals,
-    cost_map_mode: costMapMode,
+    cost_map_mode: resolvedMode,
     adversarial_strength: adversarialStrength,
     emd_n: emdN,
   };
 }
 
-export function runDecodePipeline(
+export async function runDecodePipeline(
   imageBuffer: Buffer,
   passphrase: string,
   threshA: number = 0.35,
@@ -279,9 +315,9 @@ export function runDecodePipeline(
   gamma: number = 0.7,
   kbBits: number = 2,
   kcBits: number = 3,
-  costMapMode: string = 'fast',
+  costMapMode: string = 'neural',
   emdN: number = 2
-): DecodeResult {
+): Promise<DecodeResult> {
   if (!passphrase) {
     throw new Error('Passphrase is required.');
   }
@@ -295,10 +331,9 @@ export function runDecodePipeline(
     kcBits,
   };
 
-  // Skip cost map on decode — spatial strips only (fast + stable)
   const N = image.width * image.height;
 
-  // Spatial-strip zones (stable, matches encode; avoids cost-map drift)
+  // Spatial-strip zones (invariant and bit-exact across encode and decode)
   const H = image.height;
   const W = image.width;
   const zones3D = new Uint8Array(N * 3);
@@ -331,7 +366,6 @@ export function runDecodePipeline(
 
   const extractedBytes: number[] = [];
 
-  // Helper: append bytes without spread (avoids max call stack on large images)
   const appendBytes = (src: Uint8Array | Buffer | number[]) => {
     for (let i = 0; i < src.length; i++) extractedBytes.push(src[i]);
   };
@@ -373,10 +407,11 @@ export function runDecodePipeline(
   }
 
   try {
-    const plaintext = decryptPayload(Buffer.from(extractedBytes), passphrase);
+    const { plaintext, metadata } = decryptPayload(Buffer.from(extractedBytes), passphrase);
     return {
       success: true,
       decrypted_text: plaintext,
+      cost_map_mode: metadata?.costMapMode || costMapMode,
     };
   } catch (err: any) {
     throw new Error('Message could not be decrypted — wrong passphrase or corrupted image.');

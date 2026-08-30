@@ -20,7 +20,7 @@ export function App() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-indigo-500 selection:text-white">
+    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans selection:bg-indigo-500 selection:text-white">
       {/* Navigation Bar */}
       <Navbar
         activeTab={activeTab}
@@ -43,10 +43,10 @@ export function App() {
       <QuickstartModal isOpen={isDocsOpen} onClose={() => setIsDocsOpen(false)} />
 
       {/* Persistent Footer */}
-      <footer className="border-t border-slate-900 bg-slate-950 py-6 text-center text-xs text-slate-500">
+      <footer className="border-t border-slate-200 bg-white py-6 text-center text-xs text-slate-500">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
           <span>SecureStegVault v3.2 — CNN Adaptive EMD-OPAP Image Steganography Research Platform</span>
-          <span className="font-mono text-slate-600">AES-256-GCM • EMD Base-5/7 • Optimal Pixel Adjustment Process</span>
+          <span className="font-mono text-slate-500">AES-256-GCM • EMD Base-5/7 • Optimal Pixel Adjustment Process</span>
         </div>
       </footer>
     </div>

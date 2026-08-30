@@ -1,4 +1,4 @@
-export type CostMapMode = 'cnn' | 'classical' | 'advanced';
+export type CostMapMode = 'cnn' | 'classical' | 'advanced' | 'neural' | 'heuristic';
 
 export interface ZoningConfig {
   threshA: number; // percentile or threshold for Zone A (EMD) e.g. 0.35
@@ -155,6 +155,64 @@ export interface BatchItem {
   error?: string;
 }
 
+export interface BenchmarkOperationRecord {
+  id: string;
+  timestamp: string;
+  imageName: string;
+  imageIndex: number;
+  dataset: string;
+  modelId: string;
+  modelName: string;
+  modelCategory: 'Proposed' | 'Baseline' | 'Ablation' | 'Paper';
+  paperReference?: string;
+  requiresCheckpoint: boolean;
+  operation: 'embed_and_extract';
+  startTime: number;
+  endTime: number;
+  durationMs: number;
+  status: 'completed' | 'failed' | 'unavailable';
+  error?: string;
+  psnrDb?: number;
+  ssim?: number;
+  mse?: number;
+  payloadSize: number; // bytes
+  capacityBytes: number;
+  bpp?: number;
+  extractionSuccess?: boolean;
+  securityScore?: number;
+  detectionRate?: number;
+}
+
+export interface BestResultSummary {
+  bestPsnr?: {
+    modelName: string;
+    modelId: string;
+    imageName: string;
+    value: number;
+  };
+  bestSsim?: {
+    modelName: string;
+    modelId: string;
+    imageName: string;
+    value: number;
+  };
+  bestOverall?: {
+    modelName: string;
+    modelId: string;
+    score: number;
+    avgPsnr: number;
+    avgSsim: number;
+  };
+  insufficientData: boolean;
+}
+
+export interface BenchmarkSessionStats {
+  totalImages: number;
+  totalRuns: number;
+  successfulRuns: number;
+  failedRuns: number;
+}
+
 export interface SystemHealth {
   status: string;
   service: string;
@@ -166,3 +224,4 @@ export interface SystemHealth {
     steganalyzerNet: boolean;
   };
 }
+

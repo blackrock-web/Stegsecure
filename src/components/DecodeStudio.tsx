@@ -96,12 +96,12 @@ export const DecodeStudio: React.FC = () => {
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 space-y-6">
       {/* Top Header */}
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm">
-        <h1 className="text-xl font-bold text-white flex items-center space-x-2">
-          <Unlock className="w-5 h-5 text-emerald-400" />
+      <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs">
+        <h1 className="text-xl font-bold text-slate-900 flex items-center space-x-2">
+          <Unlock className="w-5 h-5 text-emerald-600" />
           <span>Extraction Vault: Authenticated Payload Recovery</span>
         </h1>
-        <p className="text-xs text-slate-400 mt-1">
+        <p className="text-xs text-slate-500 mt-1">
           Recovers hidden steganography streams, executes reverse EMD digit unmapping and OPAP extraction, and verifies AES-256-GCM integrity tags.
         </p>
       </div>
@@ -110,15 +110,15 @@ export const DecodeStudio: React.FC = () => {
         {/* Left Column: Image Upload & Parameters */}
         <div className="space-y-4">
           {/* Stego Image Upload */}
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-sm">
-            <label className="text-xs font-bold text-slate-200 uppercase tracking-wider block mb-2">
+          <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs">
+            <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block mb-2">
               Upload Stego Image (PNG / BMP)
             </label>
             <div
               onDragOver={(e) => e.preventDefault()}
               onDrop={handleDrop}
               onClick={() => fileInputRef.current?.click()}
-              className="border-2 border-dashed border-slate-700 hover:border-emerald-500 rounded-xl p-5 text-center cursor-pointer transition-colors bg-slate-950/40"
+              className="border-2 border-dashed border-slate-300 hover:border-emerald-500 rounded-xl p-5 text-center cursor-pointer transition-colors bg-slate-50/60"
             >
               <input
                 type="file"
@@ -127,22 +127,22 @@ export const DecodeStudio: React.FC = () => {
                 accept="image/png,image/bmp"
                 className="hidden"
               />
-              {previewUrl ? (
+              {previewUrl && previewUrl.trim().length > 0 ? (
                 <div className="flex flex-col items-center">
                   <img
                     src={previewUrl}
                     alt="Stego preview"
-                    className="max-h-40 rounded-lg object-contain shadow border border-slate-800"
+                    className="max-h-40 rounded-lg object-contain shadow-xs border border-slate-200"
                   />
-                  <p className="text-xs text-slate-300 mt-2 font-mono truncate max-w-xs">
+                  <p className="text-xs text-slate-700 mt-2 font-mono truncate max-w-xs">
                     {selectedFile?.name}
                   </p>
-                  <span className="text-xs text-emerald-400 mt-1">Click to change file</span>
+                  <span className="text-xs text-emerald-600 font-medium mt-1">Click to change file</span>
                 </div>
               ) : (
                 <div className="py-6 flex flex-col items-center">
-                  <Upload className="w-8 h-8 text-slate-500 mb-2" />
-                  <p className="text-xs text-slate-300 font-medium">Select or drop stego image</p>
+                  <Upload className="w-8 h-8 text-slate-400 mb-2" />
+                  <p className="text-xs text-slate-700 font-medium">Select or drop stego image</p>
                   <p className="text-xs text-slate-500">Lossless PNG recommended</p>
                 </div>
               )}
@@ -150,10 +150,10 @@ export const DecodeStudio: React.FC = () => {
           </div>
 
           {/* Passphrase Input */}
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-sm space-y-3">
+          <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs space-y-3">
             <div>
-              <label className="text-xs font-bold text-slate-200 uppercase tracking-wider block mb-1.5 flex items-center space-x-1.5">
-                <KeyRound className="w-4 h-4 text-emerald-400" />
+              <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block mb-1.5 flex items-center space-x-1.5">
+                <KeyRound className="w-4 h-4 text-emerald-600" />
                 <span>AES-256-GCM Passphrase</span>
               </label>
               <input
@@ -161,21 +161,21 @@ export const DecodeStudio: React.FC = () => {
                 value={passphrase}
                 onChange={(e) => setPassphrase(e.target.value)}
                 placeholder="Enter exact passphrase used during encoding..."
-                className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 font-mono"
+                className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs text-slate-800 focus:outline-hidden focus:bg-white focus:border-emerald-500 font-mono"
               />
             </div>
 
             {/* EMD Selector */}
             <div className="flex items-center justify-between text-xs pt-1">
-              <span className="text-slate-400">EMD Group Size:</span>
+              <span className="text-slate-600">EMD Group Size:</span>
               <div className="flex space-x-2">
                 <button
                   type="button"
                   onClick={() => setConfig({ ...config, emdN: 2 })}
-                  className={`px-3 py-1 rounded text-xs font-medium border ${
+                  className={`px-3 py-1 rounded text-xs font-medium border transition-colors ${
                     config.emdN === 2
-                      ? 'bg-indigo-600 border-indigo-500 text-white'
-                      : 'bg-slate-950 border-slate-800 text-slate-400'
+                      ? 'bg-indigo-600 border-indigo-600 text-white'
+                      : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
                   }`}
                 >
                   n=2 (Base-5)
@@ -183,10 +183,10 @@ export const DecodeStudio: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setConfig({ ...config, emdN: 3 })}
-                  className={`px-3 py-1 rounded text-xs font-medium border ${
+                  className={`px-3 py-1 rounded text-xs font-medium border transition-colors ${
                     config.emdN === 3
-                      ? 'bg-indigo-600 border-indigo-500 text-white'
-                      : 'bg-slate-950 border-slate-800 text-slate-400'
+                      ? 'bg-indigo-600 border-indigo-600 text-white'
+                      : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
                   }`}
                 >
                   n=3 (Base-7)
@@ -197,7 +197,7 @@ export const DecodeStudio: React.FC = () => {
             <button
               onClick={handleDecode}
               disabled={isDecoding || !selectedFile}
-              className="w-full py-3 px-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 disabled:opacity-50 text-white font-bold text-sm rounded-xl shadow-lg transition-all flex items-center justify-center space-x-2 cursor-pointer disabled:cursor-not-allowed mt-2"
+              className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-semibold text-sm rounded-xl shadow-xs transition-all flex items-center justify-center space-x-2 cursor-pointer disabled:cursor-not-allowed mt-2"
             >
               {isDecoding ? (
                 <>
@@ -216,19 +216,19 @@ export const DecodeStudio: React.FC = () => {
 
         {/* Right Column: Decrypted Output & Verification */}
         <div className="space-y-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm h-full flex flex-col justify-between">
+          <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs h-full flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between mb-3">
-                <h2 className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center space-x-1.5">
-                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                <h2 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center space-x-1.5">
+                  <ShieldCheck className="w-4 h-4 text-emerald-600" />
                   <span>Decrypted Payload Result</span>
                 </h2>
                 {decryptedText && (
                   <button
                     onClick={handleCopy}
-                    className="flex items-center space-x-1 px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg text-xs font-medium transition-colors"
+                    className="flex items-center space-x-1 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium transition-colors"
                   >
-                    <Copy className="w-3 h-3 text-indigo-400" />
+                    <Copy className="w-3 h-3 text-indigo-600" />
                     <span>{copied ? 'Copied!' : 'Copy Plaintext'}</span>
                   </button>
                 )}
@@ -236,27 +236,27 @@ export const DecodeStudio: React.FC = () => {
 
               {decryptedText ? (
                 <div className="space-y-3">
-                  <div className="p-3 bg-emerald-950/40 border border-emerald-800/80 rounded-xl text-xs text-emerald-300 flex items-center space-x-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 flex items-center space-x-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
                     <span>
                       Authentication Verified! 128-bit GCM MAC check succeeded. Payload is intact and uncorrupted.
                     </span>
                   </div>
 
-                  <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl font-mono text-xs text-slate-200 whitespace-pre-wrap max-h-64 overflow-y-auto leading-relaxed shadow-inner">
+                  <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl font-mono text-xs text-slate-800 whitespace-pre-wrap max-h-64 overflow-y-auto leading-relaxed shadow-inner">
                     {decryptedText}
                   </div>
                 </div>
               ) : error ? (
-                <div className="p-4 bg-red-950/50 border border-red-800/80 rounded-xl text-xs text-red-200 space-y-2">
-                  <div className="flex items-center space-x-2 font-bold text-red-400">
+                <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 space-y-2">
+                  <div className="flex items-center space-x-2 font-bold text-rose-700">
                     <AlertTriangle className="w-4 h-4" />
                     <span>Extraction Error</span>
                   </div>
                   <p>{error}</p>
                 </div>
               ) : (
-                <div className="py-16 text-center text-slate-500 text-xs">
+                <div className="py-16 text-center text-slate-400 text-xs">
                   <FileText className="w-10 h-10 mx-auto mb-2 opacity-40 text-slate-400" />
                   <p>Upload a stego image and enter the passphrase to decrypt hidden payload.</p>
                 </div>
@@ -264,18 +264,18 @@ export const DecodeStudio: React.FC = () => {
             </div>
 
             {/* Cryptographic Proof Specifications */}
-            <div className="mt-4 pt-3 border-t border-slate-800/80 text-[11px] text-slate-400 font-mono space-y-1">
+            <div className="mt-4 pt-3 border-t border-slate-100 text-[11px] text-slate-500 font-mono space-y-1">
               <div className="flex justify-between">
                 <span>Cipher:</span>
-                <span className="text-slate-300">AES-256-GCM (Authenticated)</span>
+                <span className="text-slate-700 font-medium">AES-256-GCM (Authenticated)</span>
               </div>
               <div className="flex justify-between">
                 <span>Key Derivation:</span>
-                <span className="text-slate-300">PBKDF2-HMAC-SHA256 (10,000 iter)</span>
+                <span className="text-slate-700 font-medium">PBKDF2-HMAC-SHA256 (10,000 iter)</span>
               </div>
               <div className="flex justify-between">
                 <span>Allocation Schema:</span>
-                <span className="text-slate-300">Zhang-Wang EMD + Chan-Cheng OPAP</span>
+                <span className="text-slate-700 font-medium">Zhang-Wang EMD + Chan-Cheng OPAP</span>
               </div>
             </div>
           </div>

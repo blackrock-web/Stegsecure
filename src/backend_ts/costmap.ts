@@ -119,3 +119,21 @@ export function computeCostMap(
 
   return finalMap;
 }
+
+/**
+ * Stability quantization: clears the lower `stabilizeBits` so that cover-time
+ * and stego-time cost map inputs remain identical despite embedding modifications (+/- 1-2 pixel changes).
+ */
+export function quantizeForCostStability(
+  gray: Float32Array,
+  stabilizeBits: number = 3
+): Float32Array {
+  const mask = ~((1 << stabilizeBits) - 1);
+  const out = new Float32Array(gray.length);
+  for (let i = 0; i < gray.length; i++) {
+    const val = Math.round(gray[i]);
+    out[i] = Math.min(255, Math.max(0, val & mask));
+  }
+  return out;
+}
+

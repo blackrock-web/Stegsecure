@@ -136,12 +136,69 @@ export function generateVisualizations(
   }
   const rgbBitsB64 = rgbToBase64PNG(rgbBitsData, width, height);
 
+  // 7. Cover base64
+  const coverB64 = rgbToBase64PNG(cover.data, width, height);
+
+  // 8. Cost Map base64 (Jet/Thermal colormap of normalized cost map)
+  const costMapRGB = new Uint8Array(numChannels);
+  for (let i = 0; i < N; i++) {
+    const c = Math.min(1.0, Math.max(0.0, costMap[i]));
+    const idx = i * 3;
+    // Jet/Magma style colormap: low cost (purple/blue), mid cost (red/orange), high cost (yellow)
+    let r = 0, g = 0, b = 0;
+    if (c < 0.25) {
+      r = Math.floor(c * 4 * 80);
+      g = Math.floor(c * 4 * 30);
+      b = Math.floor(180 + c * 4 * 75);
+    } else if (c < 0.5) {
+      const t = (c - 0.25) * 4;
+      r = Math.floor(80 + t * 140);
+      g = Math.floor(30 + t * 40);
+      b = Math.floor(255 * (1 - t));
+    } else if (c < 0.75) {
+      const t = (c - 0.5) * 4;
+      r = Math.floor(220 + t * 35);
+      g = Math.floor(70 + t * 120);
+      b = 0;
+    } else {
+      const t = (c - 0.75) * 4;
+      r = 255;
+      g = Math.floor(190 + t * 65);
+      b = Math.floor(t * 180);
+    }
+    costMapRGB[idx + 0] = r;
+    costMapRGB[idx + 1] = g;
+    costMapRGB[idx + 2] = b;
+  }
+  const costMapB64 = rgbToBase64PNG(costMapRGB, width, height);
+
+  // 9. Amplified Residual base64 (x25 difference on neutral 128 gray canvas)
+  const residualRGB = new Uint8Array(numChannels);
+  for (let i = 0; i < numChannels; i += 3) {
+    const dR = (stegoData[i + 0] - cover.data[i + 0]) * 25;
+    const dG = (stegoData[i + 1] - cover.data[i + 1]) * 25;
+    const dB = (stegoData[i + 2] - cover.data[i + 2]) * 25;
+
+    residualRGB[i + 0] = Math.min(255, Math.max(0, 128 + dR));
+    residualRGB[i + 1] = Math.min(255, Math.max(0, 128 + dG));
+    residualRGB[i + 2] = Math.min(255, Math.max(0, 128 + dB));
+  }
+  const residualB64 = rgbToBase64PNG(residualRGB, width, height);
+
   return {
+    cover_b64: coverB64,
+    cover: coverB64,
     stego_b64: stegoB64,
+    stego: stegoB64,
+    cost_map_b64: costMapB64,
+    cost_map: costMapB64,
+    zone_map_b64: zoneMapB64,
+    zone_map: zoneMapB64,
+    residual_b64: residualB64,
+    residual: residualB64,
     heatmap_b64: heatmapB64,
     mask_b64: binaryMaskB64,           // canonical key expected by frontend
     binary_mask_b64: binaryMaskB64,    // keep for backward compatibility
-    zone_map_b64: zoneMapB64,
     gradient_overlay_b64: gradientOverlayB64,
     highlight_overlay_b64: highlightOverlayB64,
     rgb_bits_b64: rgbBitsB64,
