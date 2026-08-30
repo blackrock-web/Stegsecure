@@ -17,7 +17,7 @@
     "noFallthroughCasesInSwitch": true,
     "resolveJsonModule": true,
     "esModuleInterop": true,
-    "types": ["node"]
+    "types": ["node", "react", "react-dom"]
   },
   "include": ["src", "server.ts", "vite.config.ts"]
 }
